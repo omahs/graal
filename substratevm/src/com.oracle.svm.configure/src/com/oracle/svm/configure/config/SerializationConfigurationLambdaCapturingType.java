@@ -59,7 +59,7 @@ public class SerializationConfigurationLambdaCapturingType implements JsonPrinta
         writer.append('{').indent().newline();
         ConfigurationConditionPrintable.printConditionAttribute(condition, writer);
 
-        writer.quote(SerializationConfigurationParser.NAME_KEY).append(":").quote(qualifiedJavaName);
+        writer.quote(SerializationConfigurationParser.TYPE_KEY).append(":").quote(qualifiedJavaName);
         writer.unindent().newline().append('}');
     }
 
