@@ -26,11 +26,15 @@ package com.oracle.svm.core.hub;
 
 import static com.oracle.svm.core.MissingRegistrationUtils.throwMissingRegistrationErrors;
 
+import java.util.Set;
+
 import org.graalvm.collections.EconomicMap;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
+import org.graalvm.nativeimage.impl.ConfigurationCondition;
 
+import com.oracle.svm.core.configure.ConditionalRuntimeValue;
 import com.oracle.svm.core.feature.AutomaticallyRegisteredImageSingleton;
 import com.oracle.svm.core.reflect.MissingReflectionRegistrationUtils;
 import com.oracle.svm.core.util.ImageHeapMap;
@@ -40,77 +44,95 @@ import com.oracle.svm.util.ReflectionUtil;
 @AutomaticallyRegisteredImageSingleton
 public final class ClassForNameSupport {
 
-    static ClassForNameSupport singleton() {
+    public static ClassForNameSupport singleton() {
         return ImageSingletons.lookup(ClassForNameSupport.class);
     }
 
     /** The map used to collect registered classes. */
-    private final EconomicMap<String, Object> knownClasses = ImageHeapMap.create();
+    private final EconomicMap<String, ConditionalRuntimeValue<Object>> knownClasses = ImageHeapMap.create();
 
     private static final Object NEGATIVE_QUERY = new Object();
 
     @Platforms(Platform.HOSTED_ONLY.class)
-    public static void registerClass(Class<?> clazz) {
+    public void registerClass(Class<?> clazz) {
+        registerClass(ConfigurationCondition.alwaysTrue(), clazz);
+    }
+
+    @Platforms(Platform.HOSTED_ONLY.class)
+    public void registerClass(ConfigurationCondition condition, Class<?> clazz) {
         assert !clazz.isPrimitive() : "primitive classes cannot be looked up by name";
         if (PredefinedClassesSupport.isPredefined(clazz)) {
             return; // must be defined at runtime before it can be looked up
         }
         String name = clazz.getName();
-        Object currentValue = singleton().knownClasses.get(name);
+        ConditionalRuntimeValue<Object> conditionalRuntimeValue = knownClasses.get(name);
+        Object currentValue = conditionalRuntimeValue == null ? null : conditionalRuntimeValue.getValueUnconditionally();
+
         /*
          * If the class is already registered as negative, it means that it exists but is not
          * accessible through the builder class loader, and it was already registered by name (as
          * negative query) before this point. In that case, we update the map to contain the actual
          * class.
          */
-        VMError.guarantee(currentValue == null || currentValue == clazz || currentValue instanceof Throwable ||
+        VMError.guarantee(currentValue == null ||
+                        currentValue == clazz ||
+                        currentValue instanceof Throwable ||
                         (currentValue == NEGATIVE_QUERY && ReflectionUtil.lookupClass(true, name) == null),
                         "Invalid Class.forName value for %s: %s", name, currentValue);
 
-        if (currentValue == NEGATIVE_QUERY) {
-            singleton().knownClasses.put(name, clazz);
+        Class<?> conditionClass = condition.getType();
+        Set<Class<?>> resConditions;
+        if (conditionalRuntimeValue != null) {
+            Set<Class<?>> conditions = conditionalRuntimeValue.getConditions();
+            conditions.add(conditionClass);
+            resConditions = conditions;
         } else {
-            /*
-             * If the class has already been seen as throwing an error, we don't overwrite this
-             * error
-             */
-            singleton().knownClasses.putIfAbsent(name, clazz);
+            resConditions = Set.of(conditionClass);
+        }
+
+        if (currentValue == NEGATIVE_QUERY) {
+            knownClasses.put(name, new ConditionalRuntimeValue<>(resConditions, clazz));
+        } else if (currentValue == null) {
+            knownClasses.put(name, new ConditionalRuntimeValue<>(resConditions, clazz));
+        } else if (currentValue instanceof Class<?>) {
+            knownClasses.put(name, new ConditionalRuntimeValue<>(resConditions, clazz));
+        } else {
+            throw VMError.shouldNotReachHere("Testing");
         }
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)
-    public static void registerExceptionForClass(String className, Throwable t) {
-        Object currentValue = singleton().knownClasses.get(className);
-        VMError.guarantee(currentValue == null || currentValue.getClass() == t.getClass());
-        singleton().knownClasses.put(className, t);
+    public void registerExceptionForClass(ConfigurationCondition cnd, String className, Throwable t) {
+        knownClasses.put(className, new ConditionalRuntimeValue<>(Set.of(cnd.getType()), t));
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)
-    public static void registerNegativeQuery(String className) {
+    public void registerNegativeQuery(ConfigurationCondition cnd, String className) {
         /*
          * If the class is not accessible by the builder class loader, but was already registered
          * through registerClass(Class<?>), we don't overwrite the actual class or exception.
          */
-        singleton().knownClasses.putIfAbsent(className, NEGATIVE_QUERY);
+        knownClasses.putIfAbsent(className, new ConditionalRuntimeValue<>(Set.of(cnd.getType()), NEGATIVE_QUERY));
     }
 
-    public static Class<?> forNameOrNull(String className, ClassLoader classLoader) {
+    public Class<?> forNameOrNull(String className, ClassLoader classLoader) {
         try {
             return forName(className, classLoader, true);
         } catch (ClassNotFoundException e) {
-            throw VMError.shouldNotReachHere("ClassForNameSupport.forNameOrNull should not throw", e);
+            throw VMError.shouldNotReachHere("ClassForNameSupport#forNameOrNull should not throw", e);
         }
     }
 
-    public static Class<?> forName(String className, ClassLoader classLoader) throws ClassNotFoundException {
+    public Class<?> forName(String className, ClassLoader classLoader) throws ClassNotFoundException {
         return forName(className, classLoader, false);
     }
 
-    private static Class<?> forName(String className, ClassLoader classLoader, boolean returnNullOnException) throws ClassNotFoundException {
+    private Class<?> forName(String className, ClassLoader classLoader, boolean returnNullOnException) throws ClassNotFoundException {
         if (className == null) {
             return null;
         }
-        Object result = singleton().knownClasses.get(className);
+        var conditional = knownClasses.get(className);
+        Object result = conditional == null ? null : conditional.getValue(cls -> DynamicHub.fromClass(cls).isReached());
         if (result == NEGATIVE_QUERY || className.endsWith("[]")) {
             /* Querying array classes with their "TypeName[]" name always throws */
             result = new ClassNotFoundException(className);
@@ -146,7 +168,7 @@ public final class ClassForNameSupport {
         throw VMError.shouldNotReachHere("Class.forName result should be Class, ClassNotFoundException or Error: " + result);
     }
 
-    public static int count() {
-        return singleton().knownClasses.size();
+    public int count() {
+        return knownClasses.size();
     }
 }

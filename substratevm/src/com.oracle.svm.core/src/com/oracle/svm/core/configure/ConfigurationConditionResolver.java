@@ -39,7 +39,7 @@ public interface ConfigurationConditionResolver<T> {
 
             @Override
             public UnresolvedConfigurationCondition alwaysTrue() {
-                return UnresolvedConfigurationCondition.create("java.lang.Object");
+                return UnresolvedConfigurationCondition.create("java.lang.Object", false);
             }
         };
     }

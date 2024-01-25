@@ -53,7 +53,7 @@ import java.util.Objects;
 public final class ConfigurationCondition {
 
     /* Cached to save space: it is used as a marker for all non-conditional elements */
-    private static final ConfigurationCondition JAVA_LANG_OBJECT_REACHED = new ConfigurationCondition(Object.class);
+    private static final ConfigurationCondition JAVA_LANG_OBJECT_REACHED = new ConfigurationCondition(Object.class, true);
 
     public static ConfigurationCondition alwaysTrue() {
         return JAVA_LANG_OBJECT_REACHED;
@@ -61,23 +61,30 @@ public final class ConfigurationCondition {
 
     private final Class<?> type;
 
-    public static ConfigurationCondition create(Class<?> type) {
+    private final boolean runtimeChecked;
+
+    public static ConfigurationCondition create(Class<?> type, boolean runtimeChecked) {
         if (JAVA_LANG_OBJECT_REACHED.getType().equals(type)) {
             return JAVA_LANG_OBJECT_REACHED;
         }
-        return new ConfigurationCondition(type);
+        return new ConfigurationCondition(type, runtimeChecked);
     }
 
     public boolean isAlwaysTrue() {
         return ConfigurationCondition.alwaysTrue().equals(this);
     }
 
-    private ConfigurationCondition(Class<?> type) {
+    private ConfigurationCondition(Class<?> type, boolean runtimeChecked) {
+        this.runtimeChecked = runtimeChecked;
         this.type = type;
     }
 
     public Class<?> getType() {
         return type;
+    }
+
+    public boolean isRuntimeChecked() {
+        return runtimeChecked;
     }
 
     @Override
@@ -88,13 +95,13 @@ public final class ConfigurationCondition {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        ConfigurationCondition condition = (ConfigurationCondition) o;
-        return Objects.equals(type, condition.type);
+        ConfigurationCondition that = (ConfigurationCondition) o;
+        return runtimeChecked == that.runtimeChecked && Objects.equals(type, that.type);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(type);
+        return Objects.hash(type, runtimeChecked);
     }
-
+    
 }

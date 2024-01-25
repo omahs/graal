@@ -192,7 +192,7 @@ public class DynamicHubInitializer {
         boolean initializedAtBuildTime = SimulateClassInitializerSupport.singleton().trySimulateClassInitializer(bb, type);
         ClassInitializationInfo info;
         if (initializedAtBuildTime) {
-            info = type.getClassInitializer() == null ? ClassInitializationInfo.NO_INITIALIZER_INFO_SINGLETON : ClassInitializationInfo.INITIALIZED_INFO_SINGLETON;
+            info = type.getClassInitializer() == null ? ClassInitializationInfo.createNoInitializerInfo() : ClassInitializationInfo.createInitializedInfo();
         } else {
             info = buildRuntimeInitializationInfo(type);
         }
@@ -219,7 +219,7 @@ public class DynamicHubInitializer {
              * All other linking errors will be reported as NoClassDefFoundError when initialization
              * is attempted at run time.
              */
-            return ClassInitializationInfo.FAILED_INFO_SINGLETON;
+            return ClassInitializationInfo.createFailedInfo();
         }
 
         /*

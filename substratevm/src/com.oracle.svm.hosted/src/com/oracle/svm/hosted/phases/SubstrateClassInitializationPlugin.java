@@ -28,7 +28,9 @@ import java.util.function.Supplier;
 
 import com.oracle.svm.core.classinitialization.EnsureClassInitializedNode;
 import com.oracle.svm.hosted.SVMHost;
+import com.oracle.svm.hosted.classinitialization.ClassInitializationSupport;
 
+import jdk.graal.compiler.api.replacements.SnippetReflectionProvider;
 import jdk.graal.compiler.nodes.ConstantNode;
 import jdk.graal.compiler.nodes.FrameState;
 import jdk.graal.compiler.nodes.ValueNode;
@@ -58,16 +60,19 @@ public class SubstrateClassInitializationPlugin implements ClassInitializationPl
 
     @Override
     public boolean apply(GraphBuilderContext builder, ResolvedJavaType type, Supplier<FrameState> frameState) {
-        if (EnsureClassInitializedNode.needsRuntimeInitialization(builder.getMethod().getDeclaringClass(), type)) {
-            emitEnsureClassInitialized(builder, builder.getSnippetReflection().forObject(host.dynamicHub(type)), frameState.get());
+        var requiredForTypeReached = ClassInitializationSupport.singleton().requiresTypeReachedCheck(type);
+        if (requiredForTypeReached ||
+                        EnsureClassInitializedNode.needsRuntimeInitialization(builder.getMethod().getDeclaringClass(), type)) {
+            SnippetReflectionProvider snippetReflection = builder.getSnippetReflection();
+            emitEnsureClassInitialized(builder, snippetReflection.forObject(host.dynamicHub(type)), frameState.get(), requiredForTypeReached);
             return true;
         }
         return false;
     }
 
-    private static void emitEnsureClassInitialized(GraphBuilderContext builder, JavaConstant hubConstant, FrameState frameState) {
+    private static void emitEnsureClassInitialized(GraphBuilderContext builder, JavaConstant hubConstant, FrameState frameState, boolean requiredForTypeReached) {
         ValueNode hub = ConstantNode.forConstant(hubConstant, builder.getMetaAccess(), builder.getGraph());
-        EnsureClassInitializedNode node = new EnsureClassInitializedNode(hub, frameState);
+        EnsureClassInitializedNode node = new EnsureClassInitializedNode(hub, frameState, requiredForTypeReached);
         builder.canonicalizeAndAdd(node);
     }
 }

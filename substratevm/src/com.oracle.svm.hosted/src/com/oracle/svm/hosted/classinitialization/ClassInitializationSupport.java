@@ -37,7 +37,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.graalvm.collections.EconomicSet;
-import jdk.graal.compiler.java.LambdaUtils;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.impl.RuntimeClassInitializationSupport;
 import org.graalvm.nativeimage.impl.clinit.ClassInitializationTracking;
@@ -50,9 +49,11 @@ import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.core.option.LocatableMultiOptionValue;
 import com.oracle.svm.core.option.SubstrateOptionsParser;
 import com.oracle.svm.core.util.UserError;
+import com.oracle.svm.core.util.VMError;
 import com.oracle.svm.hosted.ImageClassLoader;
 import com.oracle.svm.hosted.LinkAtBuildTimeSupport;
 
+import jdk.graal.compiler.java.LambdaUtils;
 import jdk.internal.misc.Unsafe;
 import jdk.vm.ci.meta.MetaAccessProvider;
 import jdk.vm.ci.meta.ResolvedJavaType;
@@ -76,6 +77,8 @@ public abstract class ClassInitializationSupport implements RuntimeClassInitiali
      * ground truth about what got initialized during image building.
      */
     final ConcurrentMap<Class<?>, InitKind> classInitKinds = new ConcurrentHashMap<>();
+
+    final Set<Class<?>> typesRequiringReachability = ConcurrentHashMap.newKeySet();
 
     boolean configurationSealed;
 
@@ -325,5 +328,33 @@ public abstract class ClassInitializationSupport implements RuntimeClassInitiali
                 addAllInterfaces(interf, result);
             }
         }
+    }
+
+    public void addForTypeReachedTracking(Class<?> clazz) {
+        VMError.guarantee(clazz != Object.class, "It would be bad to add class initializer check for all `java.lang.Object` subtypes--Object is always reached.");
+        UserError.guarantee(!configurationSealed, "It is not possible to register types for reachability tracking after the analysis has started.");
+        typesRequiringReachability.add(clazz);
+    }
+
+    /**
+     * If any type in the class hierarchy was marked as type reached, we have to track
+     * initialization for all their sub-types. Otherwise, marking the super class as reached could
+     * be missed when the initializer of the subclass is computed at build time.
+     */
+    public boolean requiresTypeReachedCheck(ResolvedJavaType type) {
+        if (type == null) {
+            return false;
+        }
+
+        var result = typesRequiringReachability.contains(OriginalClassProvider.getJavaClass(type)) ||
+                        requiresTypeReachedCheck(type.getSuperclass());
+
+        for (ResolvedJavaType anInterface : type.getInterfaces()) {
+            if (result) {
+                break;
+            }
+            result = requiresTypeReachedCheck(anInterface);
+        }
+        return result;
     }
 }

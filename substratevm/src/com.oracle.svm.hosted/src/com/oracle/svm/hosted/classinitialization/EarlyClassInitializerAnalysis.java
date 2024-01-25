@@ -222,12 +222,14 @@ final class EarlyClassInitializerAnalysis {
         @Override
         public boolean apply(GraphBuilderContext b, ResolvedJavaType type, Supplier<FrameState> frameState) {
             ResolvedJavaMethod clinitMethod = b.getGraph().method();
-            if (!EnsureClassInitializedNode.needsRuntimeInitialization(clinitMethod.getDeclaringClass(), type)) {
-                return false;
-            }
-            if (classInitializationSupport.computeInitKindAndMaybeInitializeClass(OriginalClassProvider.getJavaClass(type), true, analyzedClasses) != InitKind.RUN_TIME) {
-                assert type.isInitialized() : "Type must be initialized now";
-                return false;
+            if (!classInitializationSupport.requiresTypeReachedCheck(type)) {
+                if (!EnsureClassInitializedNode.needsRuntimeInitialization(clinitMethod.getDeclaringClass(), type)) {
+                    return false;
+                }
+                if (classInitializationSupport.computeInitKindAndMaybeInitializeClass(OriginalClassProvider.getJavaClass(type), true, analyzedClasses) != InitKind.RUN_TIME) {
+                    assert type.isInitialized() : "Type must be initialized now";
+                    return false;
+                }
             }
             throw new ClassInitializerHasSideEffectsException("Reference of class that is not initialized: " + type.toJavaName(true));
         }

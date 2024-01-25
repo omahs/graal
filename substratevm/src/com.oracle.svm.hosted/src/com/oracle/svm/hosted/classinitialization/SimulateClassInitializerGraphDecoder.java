@@ -376,8 +376,9 @@ public class SimulateClassInitializerGraphDecoder extends InlineBeforeAnalysisGr
 
     private Node handleEnsureClassInitializedNode(EnsureClassInitializedNode node) {
         var classInitType = (AnalysisType) node.constantTypeOrNull(providers.getConstantReflection());
+        // TODO Discuss how to hande this
         if (classInitType != null) {
-            if (support.trySimulateClassInitializer(graph.getDebug(), classInitType, clusterMember)) {
+            if (support.trySimulateClassInitializer(graph.getDebug(), classInitType, clusterMember) && !ClassInitializationSupport.singleton().requiresTypeReachedCheck(classInitType)) {
                 /* Class is already simulated initialized, no need for a run-time check. */
                 return null;
             }

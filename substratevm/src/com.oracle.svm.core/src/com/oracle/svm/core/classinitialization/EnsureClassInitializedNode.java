@@ -24,6 +24,8 @@
  */
 package com.oracle.svm.core.classinitialization;
 
+import org.graalvm.word.LocationIdentity;
+
 import jdk.graal.compiler.core.common.type.StampFactory;
 import jdk.graal.compiler.graph.Node;
 import jdk.graal.compiler.graph.Node.NodeIntrinsicFactory;
@@ -42,8 +44,6 @@ import jdk.graal.compiler.nodes.spi.Canonicalizable;
 import jdk.graal.compiler.nodes.spi.CanonicalizerTool;
 import jdk.graal.compiler.nodes.spi.Lowerable;
 import jdk.graal.compiler.nodes.type.StampTool;
-import org.graalvm.word.LocationIdentity;
-
 import jdk.vm.ci.meta.ConstantReflectionProvider;
 import jdk.vm.ci.meta.ResolvedJavaType;
 
@@ -54,6 +54,7 @@ public class EnsureClassInitializedNode extends WithExceptionNode implements Can
     public static final NodeClass<EnsureClassInitializedNode> TYPE = NodeClass.create(EnsureClassInitializedNode.class);
 
     @Input private ValueNode hub;
+    private final boolean requiredForTypeReached;
     @Input(InputType.State) private FrameState stateAfter;
 
     public static boolean intrinsify(GraphBuilderContext b, ValueNode hub) {
@@ -61,15 +62,16 @@ public class EnsureClassInitializedNode extends WithExceptionNode implements Can
         return true;
     }
 
-    public EnsureClassInitializedNode(ValueNode hub, FrameState stateAfter) {
+    public EnsureClassInitializedNode(ValueNode hub, FrameState stateAfter, boolean requiredForTypeReached) {
         super(TYPE, StampFactory.forVoid());
         this.hub = hub;
+        this.requiredForTypeReached = requiredForTypeReached;
         assert StampTool.isPointerNonNull(hub) : "Hub must already be null-checked";
         this.stateAfter = stateAfter;
     }
 
     public EnsureClassInitializedNode(ValueNode hub) {
-        this(hub, null);
+        this(hub, null, false);
     }
 
     public ValueNode getHub() {
@@ -108,7 +110,7 @@ public class EnsureClassInitializedNode extends WithExceptionNode implements Can
     @Override
     public Node canonical(CanonicalizerTool tool) {
         ResolvedJavaType type = constantTypeOrNull(tool.getConstantReflection());
-        if (type != null) {
+        if (type != null && !requiredForTypeReached) {
             for (FrameState cur = stateAfter; cur != null; cur = cur.outerFrameState()) {
                 if (!needsRuntimeInitialization(cur.getMethod().getDeclaringClass(), type)) {
                     return null;

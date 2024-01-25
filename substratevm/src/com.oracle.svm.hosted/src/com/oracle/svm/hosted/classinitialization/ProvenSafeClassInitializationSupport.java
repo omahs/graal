@@ -452,8 +452,8 @@ class ProvenSafeClassInitializationSupport extends ClassInitializationSupport {
                                  */
                                 if (maybeInitializeAtBuildTime(c)) {
                                     provenSafe.add(c);
-                                    ClassInitializationInfo initializationInfo = type.getClassInitializer() == null ? ClassInitializationInfo.NO_INITIALIZER_INFO_SINGLETON
-                                                    : ClassInitializationInfo.INITIALIZED_INFO_SINGLETON;
+                                    ClassInitializationInfo initializationInfo = type.getClassInitializer() == null ? ClassInitializationInfo.createNoInitializerInfo()
+                                                    : ClassInitializationInfo.createInitializedInfo();
                                     DynamicHub hub = ((SVMHost) aUniverse.hostVM()).dynamicHub(type);
                                     hub.setClassInitializationInfo(initializationInfo);
                                     aUniverse.getHeapScanner().rescanField(hub, dynamicHubClassInitializationInfoField);

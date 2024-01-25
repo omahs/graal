@@ -60,20 +60,26 @@ import jdk.internal.reflect.Reflection;
 @InternalVMMethod
 public final class ClassInitializationInfo {
 
-    /**
-     * Singleton for classes that are already initialized during image building and do not need
-     * class initialization at runtime, but have {@code <clinit>} methods.
-     */
-    public static final ClassInitializationInfo INITIALIZED_INFO_SINGLETON = new ClassInitializationInfo(InitState.FullyInitialized, true);
+    /** Singleton for classes that failed to link during image building. */
+    public static ClassInitializationInfo createFailedInfo() {
+        return new ClassInitializationInfo(InitState.InitializationError);
+    }
 
     /**
      * Singleton for classes that are already initialized during image building and do not need
      * class initialization at runtime, and don't have {@code <clinit>} methods.
      */
-    public static final ClassInitializationInfo NO_INITIALIZER_INFO_SINGLETON = new ClassInitializationInfo(InitState.FullyInitialized, false);
+    public static ClassInitializationInfo createNoInitializerInfo() {
+        return new ClassInitializationInfo(InitState.FullyInitialized, false, true);
+    }
 
-    /** Singleton for classes that failed to link during image building. */
-    public static final ClassInitializationInfo FAILED_INFO_SINGLETON = new ClassInitializationInfo(InitState.InitializationError);
+    /**
+     * For classes that are already initialized during image building and do not need class
+     * initialization at runtime, but have {@code <clinit>} methods.
+     */
+    public static ClassInitializationInfo createInitializedInfo() {
+        return new ClassInitializationInfo(InitState.FullyInitialized, true, true);
+    }
 
     enum InitState {
         /**
@@ -133,11 +139,20 @@ public final class ClassInitializationInfo {
      * at native image's build time or run time.
      */
     private boolean hasInitializer;
+    private boolean buildTimeInitialized;
+
+    private boolean reached;
+
+    public boolean isReached() {
+        return reached;
+    }
 
     @Platforms(Platform.HOSTED_ONLY.class)
-    private ClassInitializationInfo(InitState initState, boolean hasInitializer) {
+    private ClassInitializationInfo(InitState initState, boolean hasInitializer, boolean buildTimeInitialized) {
         this(initState);
         this.hasInitializer = hasInitializer;
+        this.buildTimeInitialized = buildTimeInitialized;
+        this.reached = false;
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)
@@ -164,6 +179,14 @@ public final class ClassInitializationInfo {
         return initState == InitState.FullyInitialized;
     }
 
+    public boolean isInitializationError() {
+        return initState == InitState.InitializationError;
+    }
+
+    public boolean isBuildTimeInitialized() {
+        return buildTimeInitialized;
+    }
+
     private boolean isBeingInitialized() {
         return initState == InitState.BeingInitialized;
     }
@@ -176,6 +199,22 @@ public final class ClassInitializationInfo {
         return thread.equal(initThread);
     }
 
+    private static void reach(DynamicHub hub) {
+        var current = hub;
+        do {
+            current.getClassInitializationInfo().reached = true;
+            reachInterfaces(current);
+            current = current.getSuperHub();
+        } while (current != null);
+    }
+
+    private static void reachInterfaces(DynamicHub hub) {
+        for (DynamicHub superInterface : hub.getInterfaces()) {
+            superInterface.getClassInitializationInfo().reached = true;
+            reachInterfaces(superInterface);
+        }
+    }
+
     /**
      * Perform class initialization. This is the slow-path that should only be called after checking
      * {@link #isInitialized}.
@@ -186,6 +225,12 @@ public final class ClassInitializationInfo {
     @SubstrateForeignCallTarget(stubCallingConvention = true)
     private static void initialize(ClassInitializationInfo info, DynamicHub hub) {
         IsolateThread self = CurrentIsolate.getCurrentThread();
+
+        reach(hub);
+
+        if (info.isInitialized()) {
+            return;
+        }
 
         /*
          * GR-43118: If a predefined class is not loaded, and the caller class is loaded, set the

@@ -188,11 +188,25 @@ public abstract class ConfigurationParser {
         if (conditionData != null) {
             EconomicMap<String, Object> conditionObject = asMap(conditionData, "Attribute 'condition' must be an object");
 
-            Object conditionType = conditionObject.get(TYPE_REACHABLE_KEY);
-            if (conditionType instanceof String) {
-                return UnresolvedConfigurationCondition.create((String) conditionType);
-            } else {
-                warnOrFailOnSchemaError("'" + TYPE_REACHABLE_KEY + "' should be of type string");
+            if (conditionObject.containsKey(TYPE_REACHABLE_KEY) &&
+                            conditionObject.containsKey(TYPE_REACHED_KEY)) {
+                warnOrFailOnSchemaError("condition can not have both '" + TYPE_REACHED_KEY + "' and '" + TYPE_REACHABLE_KEY + "' set.");
+            }
+
+            if (conditionObject.containsKey(TYPE_REACHED_KEY)) {
+                Object object = conditionObject.get(TYPE_REACHED_KEY);
+                if (object instanceof String) {
+                    return UnresolvedConfigurationCondition.create((String) object, true);
+                } else {
+                    warnOrFailOnSchemaError("'" + TYPE_REACHED_KEY + "' should be of type string");
+                }
+            } else if (conditionObject.containsKey(TYPE_REACHABLE_KEY)) {
+                Object object = conditionObject.get(TYPE_REACHABLE_KEY);
+                if (object instanceof String) {
+                    return UnresolvedConfigurationCondition.create((String) object, false);
+                } else {
+                    warnOrFailOnSchemaError("'" + TYPE_REACHABLE_KEY + "' should be of type string");
+                }
             }
         }
         return UnresolvedConfigurationCondition.alwaysTrue();

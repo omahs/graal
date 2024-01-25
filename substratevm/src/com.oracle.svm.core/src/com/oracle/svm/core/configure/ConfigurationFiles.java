@@ -34,14 +34,14 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import jdk.graal.compiler.options.Option;
-import jdk.graal.compiler.options.OptionStability;
-import jdk.graal.compiler.options.OptionType;
-
 import com.oracle.svm.core.option.BundleMember;
 import com.oracle.svm.core.option.HostedOptionKey;
 import com.oracle.svm.core.option.LocatableMultiOptionValue;
 import com.oracle.svm.core.util.UserError;
+
+import jdk.graal.compiler.options.Option;
+import jdk.graal.compiler.options.OptionStability;
+import jdk.graal.compiler.options.OptionType;
 
 /**
  * Gathers configuration files from specified directories without having to provide each
@@ -122,6 +122,9 @@ public final class ConfigurationFiles {
 
         @Option(help = "When configuration files do not match their schema, abort the image build instead of emitting a warning.")//
         public static final HostedOptionKey<Boolean> StrictConfiguration = new HostedOptionKey<>(false);
+
+        @Option(help = "Testing flag: typeReachable condition is treated as typeReached.")//
+        public static final HostedOptionKey<Boolean> TreatAllConditionsAsRuntime = new HostedOptionKey<>(false);
 
         @Option(help = "Warn when reflection and JNI configuration files have elements that could not be found on the classpath or modulepath.", type = OptionType.Expert)//
         public static final HostedOptionKey<Boolean> WarnAboutMissingReflectionOrJNIMetadataElements = new HostedOptionKey<>(false);
