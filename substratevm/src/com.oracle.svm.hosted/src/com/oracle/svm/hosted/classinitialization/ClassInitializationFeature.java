@@ -114,12 +114,12 @@ public class ClassInitializationFeature implements InternalFeature {
     public void duringSetup(DuringSetupAccess a) {
         FeatureImpl.DuringSetupAccessImpl access = (FeatureImpl.DuringSetupAccessImpl) a;
         classInitializationSupport = access.getHostVM().getClassInitializationSupport();
-        access.registerObjectReplacer(this::checkImageHeapInstance);
+        access.registerObjectReachableCallback(Object.class, (ignore, obj) -> checkImageHeapInstance(obj));
         universe = ((FeatureImpl.DuringSetupAccessImpl) a).getBigBang().getUniverse();
         metaAccess = ((FeatureImpl.DuringSetupAccessImpl) a).getBigBang().getMetaAccess();
     }
 
-    private Object checkImageHeapInstance(Object obj) {
+    private void checkImageHeapInstance(Object obj) {
         /*
          * Note that initializeAtBuildTime also memoizes the class as InitKind.BUILD_TIME, which
          * means that the user cannot later manually register it as RERUN or RUN_TIME.
@@ -181,7 +181,6 @@ public class ClassInitializationFeature implements InternalFeature {
             msg += System.lineSeparator() + "The following detailed trace displays from which field in the code the object was reached.";
             throw new UnsupportedFeatureException(msg);
         }
-        return obj;
     }
 
     @Override
