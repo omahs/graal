@@ -7,8 +7,8 @@
 ## Settings
 
 - During IGV first run, you will be prompted to download and install JavaScript dependencies for IGV's Scripting shell.
- - Without JavaScript modules the Scripting shell will have less fetures (highlighting will be missing among other features).
-- It is recomended to run IGV on GraalVM.
+ - Without JavaScript modules the Scripting shell will have less features (highlighting will be missing among other features).
+- It is recommended to run IGV on GraalVM.
  - To run with GraalVM use flag `--jdkhome <path>` or setup your `PATH` environment variable to point to GraalVM installation directory.
   - This will enable the use of Scripting shell with GraalVM scripting languages.
 
